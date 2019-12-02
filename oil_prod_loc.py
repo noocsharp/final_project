@@ -1,9 +1,6 @@
 """
-Unlike oil_prod.py, this one trains one complete wells, rather than random points from random wells
-It is kind of suprising how well (pun intended) it performs on test data, despite not having data from every well.
-Also considering we are only using 50 epochs and a relatively fast learning rate, this data must have a lot of structure, meaning ML isn't strictly necessary, it just makes the job substantially easier.
-
-Assuming that it isn't overfitting, the next thing to do is figure out whether we can get as good performance just from x,y values
+This one tries to predict oil production purely on x, y location.
+Probably won't be as successful
 """
 
 import os
@@ -26,42 +23,47 @@ def run_model(opt, split, epochs_, first, *args):
             else: X_test.append(pd.read_csv("data/" + i))
 
 # combines all well log data into a dataframe
-    X_train = pd.concat(X_train)
-    X_test = pd.concat(X_test)
+    X_train = pd.concat(X_train).reset_index()
+    X_test = pd.concat(X_test).reset_index()
 
 # removes columns that might be redundant/problematic
-    X_train = X_train.drop(columns=['water saturation', 'proppant weight (lbs)', 'pump rate (cubic feet/min)']).reset_index()
-    X_test = X_test.drop(columns=['water saturation', 'proppant weight (lbs)', 'pump rate (cubic feet/min)']).reset_index()
+    X_train = X_train[['easting', 'northing', 'oil saturation']]
+    X_test = X_test[['easting', 'northing', 'oil saturation']]
+
+    print(X_train.describe())
+    print(X_test.describe())
 
 # separates our dependent variable out
     y_train = X_train.pop('oil saturation')
     y_test = X_test.pop('oil saturation')
 
 # sets up our the neural network
-    model = K.models.Sequential([K.layers.Dense(first, input_shape=[7,])])
+    model = K.models.Sequential([K.layers.Dense(first, input_shape=[2,])])
 
     for i in args:
         model.add(K.layers.Dense(i))
 
-    model.add(K.layers.Dense(1))
+    #model.add(K.layers.Dense(1))
 
     #model.compile(optimizer='adam', loss='mean_squared_error', metrics=['mean_squared_error'])
 
     model.compile(optimizer=opt, loss='mean_squared_error')
 
-    early_stopping = EarlyStopping(monitor='val_loss', min_delta=100, patience=10, 
+    early_stopping = EarlyStopping(monitor='val_loss', min_delta=.001, patience=10, 
             restore_best_weights=True)
 
 # fits model to data
     history = model.fit(X_train, y_train, epochs=epochs_, validation_data=(X_test, y_test), callbacks=[early_stopping])
 
+    print(len(X_train), len(X_test))
     return model.to_json()
 
 optimizer = K.optimizers.Adam(learning_rate=0.005, beta_1=0.9, beta_2=.999, amsgrad=False)
 
 models = []
 for i in range(10):
-    info = run_model(optimizer, .5, 100, 10, 10, 10)
+    info = run_model(optimizer, .5, 100, 1)
+    #info = run_model(optimizer, .5, 100, 10, 10, 10)
     models.append(info)
 
 with open('models_wellwise.txt', 'w') as f:
